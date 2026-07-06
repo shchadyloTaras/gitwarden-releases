@@ -1,0 +1,37 @@
+name: Refresh landing site
+
+# When a GitHub Release on this storefront is PUBLISHED (a draft promoted to public, or an
+# already-published release edited), rebuild the GitWarden landing site so its baked-in
+# version + download links resolve to the just-published release.
+#
+# Why this lives on the storefront and not in the app repo's Release workflow:
+# that workflow runs on the tag push, while electron-builder has published the release as a
+# DRAFT. GitHub's `releases/latest` — which the landing build reads at build time — excludes
+# drafts, so a rebuild fired then resolves to the PREVIOUS version and freezes the site one
+# release behind. The `release: released` event fires at promotion time, when `releases/latest`
+# is finally correct. (App repo: .github/workflows/release.yml.)
+#
+# One-time setup: add the Vercel deploy hook URL as a repo secret:
+#   gh secret set VERCEL_DEPLOY_HOOK_URL --repo shchadyloTaras/gitwarden-releases
+# (same URL as the gitwarden repo; Vercel → Project → Settings → Git → Deploy Hooks)
+
+on:
+  release:
+    types: [released, edited]
+  workflow_dispatch: # lets you trigger a manual refresh anytime from the Actions tab
+
+jobs:
+  refresh-landing:
+    name: Trigger Vercel rebuild
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fire Vercel deploy hook
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::error::VERCEL_DEPLOY_HOOK_URL secret is not set on this repo."
+            echo "Add it once: gh secret set VERCEL_DEPLOY_HOOK_URL --repo shchadyloTaras/gitwarden-releases"
+            exit 1
+          fi
+          curl -fsS -X POST "$HOOK" && echo "Triggered Vercel rebuild of the landing site."
